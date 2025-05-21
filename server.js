@@ -10,15 +10,15 @@ app.use(express.json({ limit: '10mb' }));
 
 app.post('/upload', (req, res) => {
   const dataURL = req.body.image;
+  const filename = req.body.filename || `annotation_${Date.now()}.png`;
   const base64Data = dataURL.replace(/^data:image\/png;base64,/, '');
-  const fileName = `annotation_${Date.now()}.png`;
-  const filePath = path.join(__dirname, 'public', 'uploads', fileName);
+  const filePath = path.join(__dirname, 'public', 'uploads', filename);
   fs.writeFile(filePath, base64Data, 'base64', err => {
     if (err) {
       console.error('保存失敗:', err);
       return res.status(500).send('保存失敗');
     }
-    res.send(`保存完了: ${fileName}`);
+    res.send(`保存完了: ${filename}`);
   });
 });
 

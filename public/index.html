@@ -2,34 +2,41 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>図面注釈ツール</title>
+  <meta charset="UTF-8" />
+  <title>図面注釈ツール - フルバージョン</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
-    canvas { border: 1px solid #ccc; background: white; cursor: crosshair; }
-    #controls { margin: 10px 0; }
+    body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+    canvas { border: 1px solid #ccc; background: #fff; cursor: crosshair; }
+    #toolbar { margin-bottom: 1em; }
+    #toolbar input, #toolbar button, #toolbar select { margin-right: 10px; }
   </style>
 </head>
 <body>
-  <h1>図面注釈ツール</h1>
-  <div id="controls">
-    <button onclick="toggleDraw()">✏️ 注釈モード</button>
-    <button onclick="saveImage()">💾 画像を保存</button>
+  <h1>図面注釈ツール - フルバージョン</h1>
+  <div id="toolbar">
+    <input type="text" id="projectName" placeholder="物件名を入力" />
+    <select id="floorSelect">
+      <option value="1階">1階</option>
+      <option value="2階">2階</option>
+      <option value="3階">3階</option>
+      <option value="4階">4階</option>
+    </select>
+    <button onclick="toggleDrawMode()">✏️ 注釈モード</button>
+    <button onclick="saveImage()">💾 画像保存</button>
   </div>
   <canvas id="drawingCanvas" width="800" height="500"></canvas>
   <script>
-    let canvas = document.getElementById('drawingCanvas');
-    let ctx = canvas.getContext('2d');
-    let drawing = false;
-    let drawMode = false;
-    let startX = 0, startY = 0, count = 1;
+    let canvas = document.getElementById("drawingCanvas");
+    let ctx = canvas.getContext("2d");
+    let drawing = false, drawMode = false, count = 1;
+    let startX = 0, startY = 0;
 
-    function toggleDraw() {
+    function toggleDrawMode() {
       drawMode = !drawMode;
       alert(drawMode ? "注釈モード ON" : "注釈モード OFF");
     }
 
-    canvas.addEventListener('mousedown', e => {
+    canvas.addEventListener("mousedown", function(e) {
       if (!drawMode) return;
       const rect = canvas.getBoundingClientRect();
       startX = e.clientX - rect.left;
@@ -37,33 +44,42 @@
       drawing = true;
     });
 
-    canvas.addEventListener('mouseup', e => {
+    canvas.addEventListener("mouseup", function(e) {
       if (!drawing || !drawMode) return;
+      drawing = false;
       const rect = canvas.getBoundingClientRect();
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
-      drawing = false;
+
       ctx.beginPath();
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
-      ctx.strokeStyle = 'red';
+      ctx.strokeStyle = "red";
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = 'red';
-      ctx.font = '20px sans-serif';
+
+      ctx.fillStyle = "red";
+      ctx.font = "20px sans-serif";
       ctx.fillText(`①`, endX + 5, endY - 5);
       count++;
     });
 
     function saveImage() {
-      const dataURL = canvas.toDataURL('image/png');
-      fetch('/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataURL })
-      }).then(res => res.text())
-        .then(msg => alert(msg))
-        .catch(err => alert('保存エラー: ' + err));
+      const dataURL = canvas.toDataURL("image/png");
+      const project = document.getElementById("projectName").value || "untitled";
+      const floor = document.getElementById("floorSelect").value;
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[-:.]/g, "").slice(0, 15);
+      const fileName = `${project}_${floor}_${timestamp}.png`;
+
+      fetch("/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataURL, filename: fileName })
+      })
+      .then(res => res.text())
+      .then(msg => alert(msg))
+      .catch(err => alert("保存エラー: " + err));
     }
   </script>
 </body>
