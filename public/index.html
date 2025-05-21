@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>図面注釈ツール</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+    canvas { border: 1px solid #ccc; background: white; cursor: crosshair; }
+    #controls { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>図面注釈ツール</h1>
+  <div id="controls">
+    <button onclick="toggleDraw()">✏️ 注釈モード</button>
+    <button onclick="saveImage()">💾 画像を保存</button>
+  </div>
+  <canvas id="drawingCanvas" width="800" height="500"></canvas>
+  <script>
+    let canvas = document.getElementById('drawingCanvas');
+    let ctx = canvas.getContext('2d');
+    let drawing = false;
+    let drawMode = false;
+    let startX = 0, startY = 0, count = 1;
+
+    function toggleDraw() {
+      drawMode = !drawMode;
+      alert(drawMode ? "注釈モード ON" : "注釈モード OFF");
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      if (!drawMode) return;
+      const rect = canvas.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+      drawing = true;
+    });
+
+    canvas.addEventListener('mouseup', e => {
+      if (!drawing || !drawMode) return;
+      const rect = canvas.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      drawing = false;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = 'red';
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`①`, endX + 5, endY - 5);
+      count++;
+    });
+
+    function saveImage() {
+      const dataURL = canvas.toDataURL('image/png');
+      fetch('/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataURL })
+      }).then(res => res.text())
+        .then(msg => alert(msg))
+        .catch(err => alert('保存エラー: ' + err));
+    }
+  </script>
+</body>
+</html>
