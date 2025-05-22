@@ -1,6 +1,6 @@
 
 {
-  "name": "zumen-annotation-final",
+  "name": "zumen-annotation-corrected",
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js"
