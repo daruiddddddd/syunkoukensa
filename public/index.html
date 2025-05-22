@@ -1,46 +1,51 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>図面注釈ツール</title>
+  <meta charset="UTF-8" />
+  <title>竣工検査ツール - 20240521</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
-    canvas { border: 1px solid #ccc; background: white; cursor: crosshair; }
-    #toolbar { margin-bottom: 1em; }
-    #toolbar input, #toolbar select, #toolbar button { margin-right: 10px; }
-    table { margin-top: 20px; width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 5px; font-size: 14px; }
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    canvas { border: 1px solid #ccc; background: #fff; cursor: crosshair; margin-top: 10px; width: 100%; max-width: 1000px; }
+    #toolbar button { margin-right: 8px; }
+    #tabs button.active { background: #e11d48; color: white; }
+    #tabs button { margin-right: 5px; padding: 6px 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
     .popup {
       position: absolute;
       background: white;
       border: 1px solid #ccc;
-      padding: 10px;
+      padding: 8px;
       display: none;
       z-index: 999;
     }
   </style>
 </head>
 <body>
-  <h1>図面注釈ツール</h1>
+  <h1>竣工検査ツール - 20240521</h1>
 
-  <div id="toolbar">
-    <input type="text" id="projectName" placeholder="物件名" />
-    <select id="floorSelect">
-      <option>1階</option>
-      <option>2階</option>
-      <option>3階</option>
-      <option>4階</option>
-    </select>
-    <button onclick="toggleDrawMode()">✏️ 注釈モード</button>
-    <button onclick="saveImage()">💾 画像保存</button>
+  <div id="tabs">
+    <button onclick="switchTab(1)">1</button>
+    <button onclick="switchTab(2)">2</button>
+    <button onclick="switchTab(3)">3</button>
+    <button onclick="switchTab(4)">4</button>
+    <button onclick="switchTab('summary')">まとめ</button>
   </div>
 
-  <canvas id="drawingCanvas" width="800" height="500"></canvas>
+  <div id="toolbar">
+    <button onclick="toggleDrawMode()">注釈モード</button>
+    <button onclick="undoLast()">1個前消去</button>
+    <input type="file" accept="image/*" onchange="handleImageUpload(event)">
+    <button onclick="exportCSV()">CSV保存</button>
+    <button onclick="saveImage()">画像保存</button>
+  </div>
+
+  <canvas id="drawingCanvas" width="1000" height="700"></canvas>
 
   <div id="popup" class="popup">
     <label>カテゴリ:
       <select id="category">
-        <option>天</option>
+        <option>天井</option>
         <option>壁</option>
         <option>床</option>
         <option>電気</option>
@@ -55,32 +60,46 @@
 
   <table>
     <thead>
-      <tr><th>階</th><th>番号</th><th>カテゴリ</th><th>内容</th></tr>
+      <tr><th>階</th><th>番号</th><th>カテゴリ</th><th>内容</th><th>IP</th></tr>
     </thead>
-    <tbody id="annotationRows"></tbody>
+    <tbody id="annotationTable"></tbody>
   </table>
 
   <script>
-    const canvas = document.getElementById("drawingCanvas");
-    const ctx = canvas.getContext("2d");
-    let drawing = false;
-    let drawMode = false;
-    let startX, startY;
-    let counter = 1;
-    let currentFloor = "1階";
-
-    const popup = document.getElementById("popup");
+    const canvas = document.getElementById('drawingCanvas');
+    const ctx = canvas.getContext('2d');
+    let drawMode = false, drawing = false;
+    let startX, startY, count = 1;
+    let ipColor = {}, currentFloor = '1';
 
     function toggleDrawMode() {
       drawMode = !drawMode;
-      alert(drawMode ? "注釈モード ON" : "注釈モード OFF");
+      alert(drawMode ? '注釈モード ON' : '注釈モード OFF');
     }
 
-    document.getElementById("floorSelect").addEventListener("change", e => {
-      currentFloor = e.target.value;
-    });
+    function switchTab(floor) {
+      currentFloor = floor;
+      alert('切替: ' + floor);
+    }
 
-    canvas.addEventListener("mousedown", e => {
+    function undoLast() {
+      alert('1個前を自分だけ消す処理（仮）');
+    }
+
+    function handleImageUpload(e) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    canvas.addEventListener("mousedown", function(e) {
       if (!drawMode) return;
       const rect = canvas.getBoundingClientRect();
       startX = e.clientX - rect.left;
@@ -88,59 +107,50 @@
       drawing = true;
     });
 
-    canvas.addEventListener("mouseup", e => {
+    canvas.addEventListener("mouseup", function(e) {
       if (!drawing || !drawMode) return;
       drawing = false;
       const rect = canvas.getBoundingClientRect();
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
 
-      // 矢印
       ctx.beginPath();
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
-      ctx.strokeStyle = "red";
+      ctx.strokeStyle = 'red';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // 番号
-      ctx.fillStyle = "red";
-      ctx.font = "20px sans-serif";
+      ctx.fillStyle = 'red';
+      ctx.font = '20px sans-serif';
       ctx.fillText(`①`, endX + 5, endY - 5);
 
-      // ポップアップ表示
-      popup.style.left = `${e.pageX}px`;
-      popup.style.top = `${e.pageY}px`;
-      popup.style.display = "block";
+      const popup = document.getElementById('popup');
+      popup.style.left = e.pageX + 'px';
+      popup.style.top = e.pageY + 'px';
+      popup.style.display = 'block';
     });
 
     function confirmNote() {
-      const category = document.getElementById("category").value;
-      const note = document.getElementById("noteContent").value;
+      const cat = document.getElementById('category').value;
+      const note = document.getElementById('noteContent').value;
+      const ip = '192.168.0.' + Math.floor(Math.random() * 100);
+      const color = ipColor[ip] || (ipColor[ip] = '#' + Math.floor(Math.random()*16777215).toString(16));
 
-      const row = document.createElement("tr");
-      row.innerHTML = `<td>${currentFloor}</td><td>①</td><td>${category}</td><td>${note}</td>`;
-      document.getElementById("annotationRows").appendChild(row);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${currentFloor}</td><td>①</td><td>${cat}</td><td>${note}</td><td>${ip}</td>`;
+      tr.style.color = color;
+      document.getElementById('annotationTable').appendChild(tr);
 
-      popup.style.display = "none";
+      document.getElementById('popup').style.display = 'none';
+    }
+
+    function exportCSV() {
+      alert('CSV保存処理（仮）');
     }
 
     function saveImage() {
-      const canvas = document.getElementById("drawingCanvas");
-      const dataURL = canvas.toDataURL("image/png");
-      const project = document.getElementById("projectName").value || "untitled";
-      const floor = document.getElementById("floorSelect").value;
-      const now = new Date();
-      const timestamp = now.toISOString().replace(/[-:.]/g, "").slice(0, 15);
-      const filename = `${project}_${floor}_${timestamp}.png`;
-
-      fetch("/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: dataURL, filename: filename })
-      }).then(res => res.text())
-        .then(msg => alert(msg))
-        .catch(err => alert("保存失敗：" + err));
+      alert('画像保存処理（仮）');
     }
   </script>
 </body>
