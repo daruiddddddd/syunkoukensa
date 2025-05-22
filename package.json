@@ -1,8 +1,7 @@
-
 {
-  "name": "zumen-annotation-full",
+  "name": "zumen-annotation-final",
   "version": "1.0.0",
-  "description": "図面注釈ツール - フル機能 Render版",
+  "description": "図面注釈ツール最終版",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
