@@ -1,11 +1,234 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>竣工検査ツール - 完成版 20250522</title>
+  <meta charset="UTF-8" />
+  <title>竣工検査ツール - 20250522</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    h1 { margin-bottom: 10px; }
+    #tabs button.active { background: #1e40af; color: white; }
+    #tabs button { margin-right: 5px; padding: 6px 12px; }
+    #toolbar button, input[type=file] {
+      margin: 5px 8px 5px 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      background: #fff;
+      width: 100%;
+      max-width: 1000px;
+      height: 600px;
+      touch-action: none;
+      display: block;
+      margin-top: 10px;
+    }
+    #popup {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 10px;
+      display: none;
+      z-index: 10;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
   <h1>竣工検査ツール - 20250522</h1>
-  <p>本バージョンは注釈描画・カテゴリ・CSV出力・画像保存などを含む構成です。</p>
+  <div id="tabs">
+    <button onclick="switchTab('1階')">1階</button>
+    <button onclick="switchTab('2階')">2階</button>
+    <button onclick="switchTab('3階')">3階</button>
+    <button onclick="switchTab('4階')">4階</button>
+    <button onclick="switchTab('まとめ')">まとめ</button>
+  </div>
+
+  <div id="toolbar">
+    <button onclick="toggleDrawMode()">✏️ 注釈モード</button>
+    <button onclick="undo()">1個前消去</button>
+    <input type="file" accept="image/*" onchange="handleImageUpload(event)">
+    <button onclick="downloadCSV()">CSV保存</button>
+    <button onclick="saveImage()">画像保存</button>
+  </div>
+
+  <canvas id="canvas" width="1000" height="600"></canvas>
+
+  <div id="popup">
+    <label>カテゴリ:
+      <select id="category">
+        <option>天井</option>
+        <option>壁</option>
+        <option>床</option>
+        <option>電気</option>
+        <option>設備</option>
+      </select>
+    </label><br>
+    <label>内容:
+      <input type="text" id="note" />
+    </label><br>
+    <button onclick="confirmNote()">OK</button>
+  </div>
+
+  <table id="annotationTable">
+    <thead><tr><th>階</th><th>番号</th><th>カテゴリ</th><th>内容</th><th>IP</th></tr></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    let currentFloor = '1階';
+    let drawMode = false;
+    let drawing = false;
+    let startX, startY;
+    let counter = { '1階': 1, '2階': 1, '3階': 1, '4階': 1 };
+    let data = { '1階': [], '2階': [], '3階': [], '4階': [] };
+    let ip = '192.168.0.77';
+    let ipColors = { [ip]: '#e91e63' };
+    let temp = null;
+
+    function getColor(ip) {
+      if (!ipColors[ip]) ipColors[ip] = '#' + Math.floor(Math.random() * 16777215).toString(16);
+      return ipColors[ip];
+    }
+
+    function getCircle(n) {
+      return String.fromCharCode(9311 + n - 1); // ① = 9312
+    }
+
+    function switchTab(floor) {
+      currentFloor = floor;
+      document.getElementById("canvas").style.display = floor === 'まとめ' ? 'none' : 'block';
+      renderTable();
+    }
+
+    function toggleDrawMode() { drawMode = !drawMode; }
+
+    function handleImageUpload(e) {
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    canvas.addEventListener("mousedown", (e) => {
+      if (!drawMode || currentFloor === 'まとめ') return;
+      const rect = canvas.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+      drawing = true;
+    });
+
+    canvas.addEventListener("mouseup", (e) => {
+      if (!drawing || !drawMode) return;
+      drawing = false;
+      const rect = canvas.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      const num = counter[currentFloor];
+      const color = getColor(ip);
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = "18px sans-serif";
+      ctx.fillText(getCircle(num), endX + 6, endY - 6);
+      temp = { x1: startX, y1: startY, x2: endX, y2: endY, num };
+      const popup = document.getElementById("popup");
+      popup.style.left = e.pageX + 'px';
+      popup.style.top = e.pageY + 'px';
+      popup.style.display = 'block';
+      document.getElementById("note").focus();
+    });
+
+    function confirmNote() {
+      const cat = document.getElementById("category").value;
+      const note = document.getElementById("note").value;
+      if (temp) {
+        temp.cat = cat;
+        temp.note = note;
+        temp.ip = ip;
+        data[currentFloor].push(temp);
+        counter[currentFloor]++;
+        temp = null;
+        document.getElementById("popup").style.display = "none";
+        renderTable();
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("tableBody");
+      tbody.innerHTML = "";
+      const all = currentFloor === 'まとめ' ? Object.entries(data).flatMap(([fl, list]) =>
+        list.map(d => ({ ...d, floor: fl }))
+      ) : data[currentFloor].map(d => ({ ...d, floor: currentFloor }));
+      for (const a of all) {
+        const row = document.createElement("tr");
+        row.style.color = getColor(a.ip);
+        row.innerHTML = `<td>${a.floor}</td><td>${getCircle(a.num)}</td><td>${a.cat}</td><td>${a.note}</td><td>${a.ip}</td>`;
+        tbody.appendChild(row);
+      }
+    }
+
+    function undo() {
+      const list = data[currentFloor];
+      const idx = list.map(a => a.ip).lastIndexOf(ip);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        redraw();
+        renderTable();
+      }
+    }
+
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const a of data[currentFloor]) {
+        const color = getColor(a.ip);
+        ctx.beginPath();
+        ctx.moveTo(a.x1, a.y1);
+        ctx.lineTo(a.x2, a.y2);
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.font = "18px sans-serif";
+        ctx.fillText(getCircle(a.num), a.x2 + 6, a.y2 - 6);
+      }
+    }
+
+    function downloadCSV() {
+      let csv = "階,番号,カテゴリ,内容,IP\\n";
+      const all = Object.entries(data).flatMap(([fl, list]) =>
+        list.map(d => `${fl},${getCircle(d.num)},${d.cat},${d.note},${d.ip}`)
+      ).join("\\n");
+      const blob = new Blob([csv + all], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "注釈まとめ.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function saveImage() {
+      const a = document.createElement("a");
+      a.download = `注釈_${currentFloor}_${Date.now()}.jpg`;
+      a.href = canvas.toDataURL("image/jpeg", 0.9);
+      a.click();
+    }
+  </script>
 </body>
 </html>
