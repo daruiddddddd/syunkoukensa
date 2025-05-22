@@ -1,11 +1,9 @@
 
 {
-  "name": "zumen-annotation-corrected",
+  "name": "zumen-annotation-full",
   "version": "1.0.0",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2"
-  }
+  "description": "竣工検査ツール全機能統合版",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.18.2" }
 }

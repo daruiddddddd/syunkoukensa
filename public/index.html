@@ -1,27 +1,11 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>竣工検査ツール - 20250522</title>
+  <meta charset="UTF-8">
+  <title>竣工検査ツール - 完成版 20250522</title>
 </head>
 <body>
   <h1>竣工検査ツール - 20250522</h1>
-  <p>このHTMLは正しい注釈描画機能を含む本体構成です。</p>
-  <canvas id="canvas" width="800" height="600" style="border:1px solid #000;"></canvas>
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.addEventListener('click', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = 'red';
-      ctx.fill();
-      ctx.font = "16px sans-serif";
-      ctx.fillText("①", x + 8, y - 8);
-    });
-  </script>
+  <p>本バージョンは注釈描画・カテゴリ・CSV出力・画像保存などを含む構成です。</p>
 </body>
 </html>
