@@ -2,104 +2,77 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>竣工検査ツール - 20240521</title>
+  <title>竣工検査ツール</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
-    canvas { border: 1px solid #ccc; background: #fff; cursor: crosshair; margin-top: 10px; width: 100%; max-width: 1000px; }
-    #toolbar button { margin-right: 8px; }
-    #tabs button.active { background: #e11d48; color: white; }
-    #tabs button { margin-right: 5px; padding: 6px 12px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    body { font-family: sans-serif; margin: 20px; background: #f0f0f0; }
+    canvas { border: 1px solid #ccc; background: #fff; touch-action: none; width: 100%; max-width: 1000px; height: 600px; }
+    #tabs button { margin-right: 5px; padding: 6px 10px; }
+    #popup { position: absolute; background: white; border: 1px solid #ccc; padding: 10px; display: none; z-index: 10; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; }
-    .popup {
-      position: absolute;
-      background: white;
-      border: 1px solid #ccc;
-      padding: 8px;
-      display: none;
-      z-index: 999;
-    }
   </style>
 </head>
 <body>
-  <h1>竣工検査ツール - 20240521</h1>
-
+  <h1>竣工検査ツール</h1>
   <div id="tabs">
-    <button onclick="switchTab(1)">1</button>
-    <button onclick="switchTab(2)">2</button>
-    <button onclick="switchTab(3)">3</button>
-    <button onclick="switchTab(4)">4</button>
-    <button onclick="switchTab('summary')">まとめ</button>
+    <button onclick="switchTab('1階')">1階</button>
+    <button onclick="switchTab('2階')">2階</button>
+    <button onclick="switchTab('3階')">3階</button>
+    <button onclick="switchTab('4階')">4階</button>
+    <button onclick="switchTab('まとめ')">まとめ</button>
   </div>
-
   <div id="toolbar">
-    <button onclick="toggleDrawMode()">注釈モード</button>
-    <button onclick="undoLast()">1個前消去</button>
-    <input type="file" accept="image/*" onchange="handleImageUpload(event)">
-    <button onclick="exportCSV()">CSV保存</button>
-    <button onclick="saveImage()">画像保存</button>
+    <button onclick="toggleDrawMode()">✏️ 注釈モード</button>
+    <input type="file" accept="image/*" onchange="loadImage(event)">
+    <button onclick="exportCSV()">CSV出力</button>
   </div>
-
-  <canvas id="drawingCanvas" width="1000" height="700"></canvas>
-
-  <div id="popup" class="popup">
-    <label>カテゴリ:
-      <select id="category">
-        <option>天井</option>
-        <option>壁</option>
-        <option>床</option>
-        <option>電気</option>
-        <option>設備</option>
-      </select>
-    </label><br>
-    <label>内容:
-      <input type="text" id="noteContent" />
-    </label><br>
+  <canvas id="canvas" width="1000" height="600"></canvas>
+  <div id="popup">
+    <select id="category">
+      <option>天井</option>
+      <option>壁</option>
+      <option>床</option>
+      <option>電気</option>
+      <option>設備</option>
+    </select><br>
+    <input type="text" id="note" placeholder="内容"><br>
     <button onclick="confirmNote()">OK</button>
   </div>
-
-  <table>
-    <thead>
-      <tr><th>階</th><th>番号</th><th>カテゴリ</th><th>内容</th><th>IP</th></tr>
-    </thead>
-    <tbody id="annotationTable"></tbody>
-  </table>
-
+  <div id="summary"></div>
   <script>
-    const canvas = document.getElementById('drawingCanvas');
+    const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let drawMode = false, drawing = false;
-    let startX, startY, count = 1;
-    let ipColor = {}, currentFloor = '1';
+    let startX, startY;
+    let floor = '1階';
+    let counter = { '1階': 1, '2階': 1, '3階': 1, '4階': 1 };
+    let annotations = { '1階': [], '2階': [], '3階': [], '4階': [] };
+    let currentLine = null;
+    const ip = "192.168.0.77"; // 仮のIP
+    const ipColor = { [ip]: "#e91e63" };
+
+    function switchTab(f) {
+      floor = f;
+      document.getElementById('summary').style.display = (f === 'まとめ') ? 'block' : 'none';
+      canvas.style.display = (f === 'まとめ') ? 'none' : 'block';
+      if (f === 'まとめ') showSummary();
+    }
 
     function toggleDrawMode() {
       drawMode = !drawMode;
-      alert(drawMode ? '注釈モード ON' : '注釈モード OFF');
     }
 
-    function switchTab(floor) {
-      currentFloor = floor;
-      alert('切替: ' + floor);
-    }
-
-    function undoLast() {
-      alert('1個前を自分だけ消す処理（仮）');
-    }
-
-    function handleImageUpload(e) {
+    function loadImage(e) {
       const reader = new FileReader();
-      reader.onload = function(event) {
+      reader.onload = function(evt) {
         const img = new Image();
-        img.onload = function() {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        };
-        img.src = event.target.result;
+        img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        img.src = evt.target.result;
       };
       reader.readAsDataURL(e.target.files[0]);
     }
 
-    canvas.addEventListener("mousedown", function(e) {
+    canvas.addEventListener('mousedown', e => {
       if (!drawMode) return;
       const rect = canvas.getBoundingClientRect();
       startX = e.clientX - rect.left;
@@ -107,50 +80,101 @@
       drawing = true;
     });
 
-    canvas.addEventListener("mouseup", function(e) {
+    canvas.addEventListener('mousemove', e => {
+      if (!drawing || !drawMode) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      loadImage.last && ctx.drawImage(loadImage.last, 0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = ipColor[ip];
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = ipColor[ip];
+      ctx.font = "18px sans-serif";
+      ctx.fillText(`\u2460`.charCodeAt(0) + counter[floor] - 1, x + 8, y - 8);
+    });
+
+    canvas.addEventListener('mouseup', e => {
       if (!drawing || !drawMode) return;
       drawing = false;
       const rect = canvas.getBoundingClientRect();
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
-
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.strokeStyle = 'red';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = 'red';
-      ctx.font = '20px sans-serif';
-      ctx.fillText(`①`, endX + 5, endY - 5);
-
+      currentLine = { x1: startX, y1: startY, x2: endX, y2: endY };
       const popup = document.getElementById('popup');
-      popup.style.left = e.pageX + 'px';
-      popup.style.top = e.pageY + 'px';
+      popup.style.left = `${e.pageX}px`;
+      popup.style.top = `${e.pageY}px`;
       popup.style.display = 'block';
     });
 
     function confirmNote() {
       const cat = document.getElementById('category').value;
-      const note = document.getElementById('noteContent').value;
-      const ip = '192.168.0.' + Math.floor(Math.random() * 100);
-      const color = ipColor[ip] || (ipColor[ip] = '#' + Math.floor(Math.random()*16777215).toString(16));
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${currentFloor}</td><td>①</td><td>${cat}</td><td>${note}</td><td>${ip}</td>`;
-      tr.style.color = color;
-      document.getElementById('annotationTable').appendChild(tr);
-
+      const note = document.getElementById('note').value;
+      const n = counter[floor]++;
+      annotations[floor].push({ ...currentLine, num: n, cat, note, ip });
+      drawAnnotation(currentLine, n, cat, note);
       document.getElementById('popup').style.display = 'none';
     }
 
-    function exportCSV() {
-      alert('CSV保存処理（仮）');
+    function drawAnnotation(a, n, cat, note) {
+      ctx.beginPath();
+      ctx.moveTo(a.x1, a.y1);
+      ctx.lineTo(a.x2, a.y2);
+      ctx.strokeStyle = ipColor[ip];
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = ipColor[ip];
+      ctx.font = "18px sans-serif";
+      ctx.fillText(`\u2460`.charCodeAt(0) + n - 1, a.x2 + 6, a.y2 - 6);
     }
 
-    function saveImage() {
-      alert('画像保存処理（仮）');
+    function showSummary() {
+      const div = document.getElementById('summary');
+      div.innerHTML = '<h3>注釈一覧</h3>';
+      let html = '<table><tr><th>階</th><th>番号</th><th>カテゴリ</th><th>内容</th><th>IP</th></tr>';
+      for (let fl in annotations) {
+        for (let a of annotations[fl]) {
+          const num = String.fromCharCode(9311 + a.num); // 丸数字
+          html += `<tr style="color:${ipColor[a.ip]}"><td>${fl}</td><td>${num}</td><td>${a.cat}</td><td>${a.note}</td><td>${a.ip}</td></tr>`;
+        }
+      }
+      html += '</table><button onclick="downloadCSV()">CSV保存</button>';
+      div.innerHTML += html;
+    }
+
+    function exportCSV() {
+      if (floor === 'まとめ') return downloadCSV();
+      let csv = "階,番号,カテゴリ,内容,IP\n";
+      for (let a of annotations[floor]) {
+        const num = String.fromCharCode(9311 + a.num);
+        csv += `${floor},${num},${a.cat},${a.note},${a.ip}\n`;
+      }
+      download(csv, `注釈_${floor}.csv`);
+    }
+
+    function downloadCSV() {
+      let csv = "階,番号,カテゴリ,内容,IP\n";
+      for (let fl in annotations) {
+        for (let a of annotations[fl]) {
+          const num = String.fromCharCode(9311 + a.num);
+          csv += `${fl},${num},${a.cat},${a.note},${a.ip}\n`;
+        }
+      }
+      download(csv, "注釈まとめ.csv");
+    }
+
+    function download(text, name) {
+      const blob = new Blob([text], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
     }
   </script>
 </body>
