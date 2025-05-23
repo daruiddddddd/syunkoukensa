@@ -1,22 +1,42 @@
-
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = new Server(server);
 
 app.use(express.static('public'));
-app.use(express.json({ limit: '10mb' }));
 
-app.post('/upload', (req, res) => {
-  const dataURL = req.body.image;
-  const filename = req.body.filename || `image_${Date.now()}.jpg`;
-  const base64Data = dataURL.replace(/^data:image\/png;base64,/, '');
-  const filePath = path.join(__dirname, 'public', 'uploads', filename);
-  fs.writeFile(filePath, base64Data, 'base64', err => {
-    if (err) return res.status(500).send('保存失敗');
-    res.send('保存完了: ' + filename);
+let annotations = []; // メモリ上の注釈記録
+
+io.on('connection', (socket) => {
+  console.log('新しい接続:', socket.id);
+
+  // 初期データ送信
+  socket.emit('all-annotations', annotations);
+
+  // 新しい注釈
+  socket.on('new-annotation', (data) => {
+    annotations.push(data);
+    socket.broadcast.emit('new-annotation', data);
+  });
+
+  // 注釈削除（IPベース）
+  socket.on('remove-annotation', (fromIP) => {
+    const idx = annotations.map(a => a.ip).lastIndexOf(fromIP);
+    if (idx >= 0) {
+      annotations.splice(idx, 1);
+      io.emit('remove-annotation', fromIP);
+    }
+  });
+
+  // 再送信要求
+  socket.on('get-all', () => {
+    socket.emit('all-annotations', annotations);
   });
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
