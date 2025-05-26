@@ -1,20 +1,19 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>竣工検査ツール</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-    h1 { margin-bottom: 10px; }
-    canvas { border: 1px solid #ccc; background: #fff; width: 100%; height: 600px; touch-action: none; }
+    body { font-family: sans-serif; background: #f9f9f9; padding: 20px; }
+    canvas { border: 1px solid #ccc; background: #fff; width: 100%; height: 600px; }
     #popup {
       position: absolute;
-      display: none;
       background: white;
       border: 1px solid #ccc;
       padding: 10px;
+      display: none;
       z-index: 10;
     }
     table {
@@ -42,7 +41,6 @@
 </head>
 <body>
   <h1>竣工検査ツール</h1>
-
   <div>
     <label>物件名: <input id="projectName" placeholder="例: ○○ビル" /></label>
   </div>
@@ -58,6 +56,8 @@
   <div id="toolbar">
     <button onclick="toggleDrawMode()">✏️ 注釈モード</button>
     <button onclick="undo()">戻る</button>
+    <button onclick="clearDrawings()">描画のみ削除</button>
+    <button onclick="clearImage()">画像のみ削除</button>
     <input type="file" accept="image/*" onchange="loadImage(event)">
     <button onclick="saveCSV()">CSV保存</button>
     <button onclick="saveImage()">画像保存</button>
@@ -83,24 +83,41 @@
   const socket = io();
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
+
   const floors = ['1階', '2階', '3階', '4階'];
   let currentFloor = '1階';
   let drawMode = false;
   let drawing = false;
   let startX, startY;
-  let images = {}; // floor -> image
-  let annotations = {}; // floor -> []
-  let ip = "192.168.0." + Math.floor(Math.random() * 100);
-  let ipCounters = {}; // floor -> ip -> count
-  floors.forEach(f => { annotations[f] = []; ipCounters[f] = {}; });
+  let images = {};
+  let annotations = {};
+  let ip = "192.168.0." + Math.floor(Math.random() * 1000);
+  let ipCounters = {};
+  let temp = null;
+  let bgImageData = null;
+
+  floors.forEach(f => {
+    annotations[f] = [];
+    ipCounters[f] = {};
+    images[f] = null;
+  });
+
+  const ipColorList = [
+    "#ff0000", "#0000ff", "#00aa00", "#ffff00",
+    "#ff8888", "#8888ff", "#88ff88", "#ffff88",
+    "#aa0000", "#000088", "#008800", "#ffaa00"
+  ];
+  const ipOrder = [];
+  const ipColors = {};
 
   function getColor(ip) {
-    if (!ipColors[ip]) ipColors[ip] = '#' + Math.floor(Math.random() * 16777215).toString(16);
+    if (!ipColors[ip]) {
+      if (!ipOrder.includes(ip)) ipOrder.push(ip);
+      const index = ipOrder.indexOf(ip) % ipColorList.length;
+      ipColors[ip] = ipColorList[index];
+    }
     return ipColors[ip];
   }
-
-  let ipColors = {};
-  let temp = null;
 
   function switchFloor(floor) {
     currentFloor = floor;
@@ -108,9 +125,7 @@
     renderTable();
   }
 
-  function toggleDrawMode() {
-    drawMode = !drawMode;
-  }
+  function toggleDrawMode() { drawMode = !drawMode; }
 
   function loadImage(e) {
     const reader = new FileReader();
@@ -118,6 +133,7 @@
       const img = new Image();
       img.onload = () => {
         images[currentFloor] = img;
+        socket.emit("floor-image", { floor: currentFloor, src: img.src });
         redraw();
       };
       img.src = evt.target.result;
@@ -125,8 +141,17 @@
     reader.readAsDataURL(e.target.files[0]);
   }
 
+  socket.on("floor-image", ({ floor, src }) => {
+    const img = new Image();
+    img.onload = () => {
+      images[floor] = img;
+      if (currentFloor === floor) redraw();
+    };
+    img.src = src;
+  });
+
   canvas.addEventListener("mousedown", e => {
-    if (!drawMode || currentFloor === 'まとめ') return;
+    if (!drawMode || currentFloor === "まとめ") return;
     const rect = canvas.getBoundingClientRect();
     startX = e.clientX - rect.left;
     startY = e.clientY - rect.top;
@@ -149,9 +174,9 @@
     const x2 = e.clientX - rect.left;
     const y2 = e.clientY - rect.top;
     temp = { x1: startX, y1: startY, x2, y2 };
-    document.getElementById("popup").style.left = e.pageX + 'px';
-    document.getElementById("popup").style.top = e.pageY + 'px';
-    document.getElementById("popup").style.display = 'block';
+    document.getElementById("popup").style.left = e.pageX + "px";
+    document.getElementById("popup").style.top = e.pageY + "px";
+    document.getElementById("popup").style.display = "block";
     document.getElementById("note").focus();
   });
 
@@ -185,7 +210,7 @@
   function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (images[currentFloor]) ctx.drawImage(images[currentFloor], 0, 0, canvas.width, canvas.height);
-    annotations[currentFloor].forEach(a => drawArrow(a.x1, a.y1, a.x2, a.y2, a.num, getColor(a.ip)));
+    (annotations[currentFloor] || []).forEach(a => drawArrow(a.x1, a.y1, a.x2, a.y2, a.num, getColor(a.ip)));
   }
 </script>
 <script>
@@ -196,8 +221,8 @@
     incrementIPNum(currentFloor, ip);
     const a = { ...temp, num, cat, note, ip, floor: currentFloor };
     annotations[currentFloor].push(a);
-    document.getElementById("popup").style.display = "none";
     socket.emit("new-annotation", a);
+    document.getElementById("popup").style.display = "none";
     redraw();
     renderTable();
   }
@@ -228,8 +253,20 @@
     }
   }
 
+  function clearDrawings() {
+    annotations[currentFloor] = [];
+    ipCounters[currentFloor] = {};
+    redraw();
+    renderTable();
+  }
+
+  function clearImage() {
+    images[currentFloor] = null;
+    redraw();
+  }
+
   function saveCSV() {
-    const pname = document.getElementById("projectName").value || "物件名未入力";
+    const pname = document.getElementById("projectName").value || "物件未入力";
     const rows = [["物件名", pname], ["階", "番号", "カテゴリ", "内容", "IP"]];
     const all = floors.flatMap(f => annotations[f].map(a => ({ ...a, floor: f })));
     all.forEach((a, i) => rows.push([a.floor, i + 1, a.cat, a.note, a.ip]));
@@ -256,11 +293,18 @@
     a.click();
     ctx.putImageData(bg, 0, 0);
   }
-
+</script>
+<script>
   socket.on("new-annotation", (a) => {
+    if (!annotations[a.floor]) annotations[a.floor] = [];
     annotations[a.floor].push(a);
-    redraw();
-    renderTable();
+    if (!ipCounters[a.floor]) ipCounters[a.floor] = {};
+    if (!ipCounters[a.floor][a.ip]) ipCounters[a.floor][a.ip] = 1;
+    if (a.num >= ipCounters[a.floor][a.ip]) ipCounters[a.floor][a.ip] = a.num + 1;
+    if (currentFloor === a.floor) {
+      redraw();
+      renderTable();
+    }
   });
 
   socket.on("remove-annotation", ({ ip: delIP, floor }) => {
@@ -268,15 +312,24 @@
     const idx = list.map(a => a.ip).lastIndexOf(delIP);
     if (idx >= 0) {
       list.splice(idx, 1);
-      redraw();
-      renderTable();
+      ipCounters[floor][delIP]--;
+      if (currentFloor === floor) {
+        redraw();
+        renderTable();
+      }
     }
   });
 
-  socket.on("all-annotations", (all) => {
+  socket.on("all-annotations", all => {
+    floors.forEach(f => {
+      annotations[f] = [];
+      ipCounters[f] = {};
+    });
     all.forEach(a => {
       if (!annotations[a.floor]) annotations[a.floor] = [];
       annotations[a.floor].push(a);
+      if (!ipCounters[a.floor][a.ip]) ipCounters[a.floor][a.ip] = 1;
+      if (a.num >= ipCounters[a.floor][a.ip]) ipCounters[a.floor][a.ip] = a.num + 1;
     });
     redraw();
     renderTable();
