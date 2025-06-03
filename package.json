@@ -1,7 +1,8 @@
+
 {
-  "name": "zumen-annotation-realtime",
+  "name": "zumen-annotation-fixed",
   "version": "1.0.0",
-  "description": "竣工検査ツール - リアルタイム共有＋保存復元対応",
+  "description": "竣工検査ツール - 修正済み（画像同期・注釈同期・UI維持）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

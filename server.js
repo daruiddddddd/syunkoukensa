@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,36 +8,40 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-let annotations = []; // メモリ上の注釈記録
+let annotations = [];
+let floorImages = {};
+let ipOrder = [];
 
 io.on('connection', (socket) => {
-  console.log('新しい接続:', socket.id);
+  console.log('接続:', socket.id);
 
-  // 初期データ送信
   socket.emit('all-annotations', annotations);
+  socket.emit('all-floor-images', floorImages);
 
-  // 新しい注釈
   socket.on('new-annotation', (data) => {
     annotations.push(data);
+    if (!ipOrder.includes(data.ip)) ipOrder.push(data.ip);
     socket.broadcast.emit('new-annotation', data);
   });
 
-  // 注釈削除（IPベース）
-  socket.on('remove-annotation', (fromIP) => {
-    const idx = annotations.map(a => a.ip).lastIndexOf(fromIP);
+  socket.on('remove-annotation', ({ ip, floor }) => {
+    const idx = annotations.map(a => a.ip).lastIndexOf(ip);
     if (idx >= 0) {
       annotations.splice(idx, 1);
-      io.emit('remove-annotation', fromIP);
+      io.emit('remove-annotation', { ip, floor });
     }
   });
 
-  // 再送信要求
+  socket.on('floor-image', ({ floor, src }) => {
+    floorImages[floor] = src;
+    socket.broadcast.emit('floor-image', { floor, src });
+  });
+
   socket.on('get-all', () => {
     socket.emit('all-annotations', annotations);
+    socket.emit('all-floor-images', floorImages);
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
